@@ -62,7 +62,8 @@ export default function ManualCreatePage() {
       title: '',
       intro: '',
       description: '',
-      chapters: []
+      chapters: [],
+      order: parts.length
     };
     setParts([...parts, newPart]);
     setExpandedParts(prev => ({ ...prev, [newPart.id]: true }));
@@ -77,6 +78,7 @@ export default function ManualCreatePage() {
   };
 
   const addChapter = (partId: string) => {
+    const part = parts.find(p => p.id === partId);
     const newChapter: BookChapter = {
       id: generateId(),
       book_id: '', // Will be set on save
@@ -85,7 +87,8 @@ export default function ManualCreatePage() {
       description: '',
       summary: '',
       sections: [],
-      status: 'pending'
+      status: 'pending',
+      order: part ? part.chapters.length : 0
     };
     
     setParts(parts.map(p => {
@@ -119,13 +122,17 @@ export default function ManualCreatePage() {
   };
 
   const addSection = (partId: string, chapterId: string, content: string = '') => {
+    const part = parts.find(p => p.id === partId);
+    const chapter = part?.chapters.find(c => c.id === chapterId);
+    
     const newSection: BookSection = {
       id: generateId(),
       chapter_id: chapterId,
       title: '正文', // Default title for auto-generated content
       type: 'theory',
       key_points: [],
-      content: content
+      content: content,
+      order: chapter ? chapter.sections.length : 0
     };
 
     setParts(parts.map(p => {
@@ -336,14 +343,15 @@ export default function ManualCreatePage() {
 
       // Convert planned sections to BookSection objects
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const newSections: BookSection[] = plannedSections.map((s: any) => ({
+      const newSections: BookSection[] = plannedSections.map((s: any, index: number) => ({
         id: generateId(),
         chapter_id: chapter.id,
         title: s.title,
         description: s.description || '', // Added description
         type: 'theory', // Default type
         key_points: s.key_points || [],
-        content: '' // Empty initially
+        content: '', // Empty initially
+        order: index
       }));
 
       // Update UI with new sections (Replace existing)
@@ -405,14 +413,17 @@ export default function ManualCreatePage() {
       const now = Date.now();
 
       // Construct final outline with IDs populated
-      const finalParts = parts.map(p => ({
+      const finalParts = parts.map((p, pIndex) => ({
         ...p,
-        chapters: p.chapters.map(c => ({
+        order: pIndex,
+        chapters: p.chapters.map((c, cIndex) => ({
           ...c,
           book_id: bookIdToUse,
-          sections: c.sections.map(s => ({
+          order: cIndex,
+          sections: c.sections.map((s, sIndex) => ({
             ...s,
-            chapter_id: c.id
+            chapter_id: c.id,
+            order: sIndex
           }))
         }))
       }));
@@ -435,13 +446,14 @@ export default function ManualCreatePage() {
       const chaptersToSave: BookChapter[] = [];
       const sectionsToSave: BookSection[] = [];
 
-      for (const part of parts) {
+      for (const part of finalParts) {
         for (const chapter of part.chapters) {
           chaptersToSave.push({
             ...chapter,
             book_id: bookIdToUse,
             sections: [], // Sections are stored in sections table
-            status: chapter.status || 'pending'
+            status: chapter.status || 'pending',
+            order: chapter.order // Ensure order is preserved from finalParts
           });
 
           for (const section of chapter.sections) {
@@ -449,7 +461,8 @@ export default function ManualCreatePage() {
               ...section,
               chapter_id: chapter.id,
               content: section.content || '',
-              key_points: section.key_points || []
+              key_points: section.key_points || [],
+              order: section.order // Ensure order is preserved from finalParts
             });
           }
         }

@@ -190,6 +190,20 @@ export function StepOutline() {
      // eslint-disable-next-line @typescript-eslint/no-explicit-any
      finalOutline.parts.forEach((part: any) => ensureIds(part));
 
+     // Add order fields
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     finalOutline.parts.forEach((part: any, pIndex: number) => {
+         part.order = pIndex;
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         part.chapters.forEach((chapter: any, cIndex: number) => {
+             chapter.order = cIndex;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             chapter.sections.forEach((section: any, sIndex: number) => {
+                 section.order = sIndex;
+             });
+         });
+     });
+
      // Save to DB
      console.log('Start writing clicked', finalOutline);
      try {

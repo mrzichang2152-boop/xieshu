@@ -83,10 +83,12 @@ export default function ManualEditPage() {
         
         // 1. Get all chapters for this book
         const chapters = await db.chapters.where('book_id').equals(bookId).toArray();
+        chapters.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         
         // 2. Get all sections for these chapters
         const chapterIds = chapters.map(c => c.id);
         const sections = await db.sections.where('chapter_id').anyOf(chapterIds).toArray();
+        sections.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
         // 3. Reconstruct parts
         // Wait, the 'part' concept is only in the JSON structure inside book.parts. 
@@ -120,21 +122,36 @@ export default function ManualEditPage() {
               
               // Find sections for this chapter
               const dbSections = sections.filter(s => s.chapter_id === dbChapter.id);
-              
-              let finalSections = dbSections.length > 0 ? dbSections : (chapStruct.sections || []);
+              const dbSectionMap = new Map(dbSections.map(s => [s.id, s]));
 
-              // Robust Merge: If dbSections is used but missing description, try to recover from chapStruct
-              // This fixes potential data loss if db.sections somehow didn't save the description but book.parts did
-              if (dbSections.length > 0 && chapStruct.sections) {
-                finalSections = finalSections.map(s => {
-                    const backup = chapStruct.sections.find((bs: BookSection) => bs.id === s.id);
-                    if (backup && !s.description && backup.description) {
-                        return { ...s, description: backup.description };
-                    }
-                    return s;
-                });
+              let finalSections: BookSection[] = [];
+
+              if (chapStruct.sections && chapStruct.sections.length > 0) {
+                  // 1. Use order from chapStruct
+                  finalSections = chapStruct.sections.map(s => {
+                      const dbS = dbSectionMap.get(s.id);
+                      if (dbS) {
+                          dbSectionMap.delete(s.id); // Mark as used
+                          // Merge: prefer DB content
+                          return { ...s, ...dbS };
+                      }
+                      return s;
+                  });
               }
 
+              // 2. Append any remaining sections from DB that weren't in chapStruct (orphans/newly added)
+              if (dbSectionMap.size > 0) {
+                  const remaining = Array.from(dbSectionMap.values());
+                  remaining.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); // Sort remaining by order
+                  finalSections = [...finalSections, ...remaining];
+              }
+
+              // 3. Fallback: If finalSections is empty but dbSections has stuff
+              if (finalSections.length === 0 && dbSections.length > 0) {
+                   finalSections = dbSections;
+                   finalSections.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+              }
+              
               return {
                 ...dbChapter,
                 sections: finalSections
@@ -179,7 +196,8 @@ export default function ManualEditPage() {
       title: '',
       intro: '',
       description: '',
-      chapters: []
+      chapters: [],
+      order: parts.length
     };
     setParts([...parts, newPart]);
     setExpandedParts(prev => ({ ...prev, [newPart.id]: true }));
@@ -194,6 +212,7 @@ export default function ManualEditPage() {
   };
 
   const addChapter = (partId: string) => {
+    const part = parts.find(p => p.id === partId);
     const newChapter: BookChapter = {
       id: generateId(),
       book_id: bookId, 
@@ -202,7 +221,8 @@ export default function ManualEditPage() {
       description: '',
       summary: '',
       sections: [],
-      status: 'pending'
+      status: 'pending',
+      order: part ? part.chapters.length : 0
     };
     
     setParts(parts.map(p => {
@@ -236,13 +256,17 @@ export default function ManualEditPage() {
   };
 
   const addSection = (partId: string, chapterId: string, content: string = '') => {
+    const part = parts.find(p => p.id === partId);
+    const chapter = part?.chapters.find(c => c.id === chapterId);
+    
     const newSection: BookSection = {
       id: generateId(),
       chapter_id: chapterId,
       title: '正文', // Default title for auto-generated content
       type: 'theory',
       key_points: [],
-      content: content
+      content: content,
+      order: chapter ? chapter.sections.length : 0
     };
 
     setParts(parts.map(p => {
@@ -462,14 +486,15 @@ export default function ManualEditPage() {
 
       // Convert planned sections to BookSection objects
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const newSections: BookSection[] = plannedSections.map((s: any) => ({
+      const newSections: BookSection[] = plannedSections.map((s: any, index: number) => ({
         id: generateId(),
         chapter_id: chapter.id,
         title: s.title,
         description: s.description || '', // Added description
         type: 'theory', // Default type
         key_points: s.key_points || [],
-        content: '' // Empty initially
+        content: '', // Empty initially
+        order: index
       }));
 
       // Update UI with new sections (Replace existing)
@@ -530,14 +555,17 @@ export default function ManualEditPage() {
       const now = Date.now();
 
       // Construct final outline with IDs populated
-      const finalParts = parts.map(p => ({
+      const finalParts = parts.map((p, pIndex) => ({
         ...p,
-        chapters: p.chapters.map(c => ({
+        order: pIndex,
+        chapters: p.chapters.map((c, cIndex) => ({
           ...c,
           book_id: bookId,
-          sections: c.sections.map(s => ({
+          order: cIndex,
+          sections: c.sections.map((s, sIndex) => ({
             ...s,
-            chapter_id: c.id
+            chapter_id: c.id,
+            order: sIndex
           }))
         }))
       }));
@@ -560,7 +588,7 @@ export default function ManualEditPage() {
       const chaptersToSave: BookChapter[] = [];
       const sectionsToSave: BookSection[] = [];
 
-      for (const part of parts) {
+      for (const part of finalParts) {
         for (const chapter of part.chapters) {
           chaptersToSave.push({
             ...chapter,

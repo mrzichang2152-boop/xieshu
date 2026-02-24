@@ -18,6 +18,7 @@ export interface BookPart {
   intro: string; // 篇首语
   description?: string; // 描述
   chapters: BookChapter[];
+  order: number;
 }
 
 export interface BookChapter {
@@ -29,6 +30,7 @@ export interface BookChapter {
   summary: string; // 本章小结
   sections: BookSection[]; // 节
   status: 'locked' | 'pending' | 'generating' | 'completed';
+  order: number;
 }
 
 export interface BookSection {
@@ -41,6 +43,7 @@ export interface BookSection {
   content?: string; // 生成的正文
   search_keywords?: string[]; // 自动生成的搜索词
   search_references?: SearchResult[]; // 实际引用的搜索结果
+  order: number;
 }
 
 // 搜索结果

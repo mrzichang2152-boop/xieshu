@@ -11,10 +11,10 @@ class AIWriterDB extends Dexie {
 
   constructor() {
     super('AIWriterDB');
-    this.version(1).stores({
+    this.version(2).stores({
       books: 'id, title, created_at',
-      chapters: 'id, book_id, status', // 索引 book_id 以便快速查询某书章节
-      sections: 'id, chapter_id, type',
+      chapters: 'id, book_id, status, order', // 索引 book_id 以便快速查询某书章节
+      sections: 'id, chapter_id, type, order',
       search_cache: '++id, query, timestamp, [query+source]' // 简单的缓存机制
     });
   }
